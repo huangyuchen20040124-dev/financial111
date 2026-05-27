@@ -2,202 +2,71 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
+
 # =========================
-# KBAR
+# KBar
 # =========================
 def build_kbar(df):
-    return {
-        "open": df["open"].values,
-        "high": df["high"].values,
-        "low": df["low"].values,
-        "close": df["close"].values,
-        "time": df["time"].values
-    }
+    close = df["close"].astype(float).values
+    high = df["high"].astype(float).values
+    low = df["low"].astype(float).values
+    return close, high, low
 
 
 # =========================
-# MA
+# SMA
 # =========================
-def run_ma_strategy(df, short=5, long=20):
-
-    k = build_kbar(df)
-    close = k["close"]
-
-    sma_s = pd.Series(close).rolling(short).mean().values
-    sma_l = pd.Series(close).rolling(long).mean().values
-
-    equity = 0
-    curve = []
-    trade = []
-
-    pos = 0
-    entry = 0
-    wins = losses = 0
-
-    fig, ax = plt.subplots()
-    ax.plot(sma_s, label="SMA short")
-    ax.plot(sma_l, label="SMA long")
-    ax.legend()
-
-    for i in range(1, len(close)):
-
-        if np.isnan(sma_s[i]) or np.isnan(sma_l[i]):
-            curve.append(equity)
-            continue
-
-        if sma_s[i] > sma_l[i] and sma_s[i-1] <= sma_l[i-1] and pos == 0:
-            pos = 1
-            entry = close[i]
-            trade.append({"time": k["time"][i], "type": "BUY", "price": entry})
-
-        elif sma_s[i] < sma_l[i] and sma_s[i-1] >= sma_l[i-1] and pos == 1:
-            pnl = close[i] - entry
-            equity += pnl
-            pos = 0
-
-            trade.append({"time": k["time"][i], "type": "SELL", "price": close[i], "pnl": pnl})
-
-            wins += pnl > 0
-            losses += pnl <= 0
-
-        curve.append(equity)
-
-    if pos == 1:
-        equity += close[-1] - entry
-
-    return pack(equity, curve, trade, wins, losses, fig)
+def SMA(arr, n):
+    return pd.Series(arr).rolling(n).mean().values
 
 
 # =========================
-# MACD（純 numpy）
+# RSI（修正版 Wilder smoothing）
 # =========================
-def ema(series, span):
-    return pd.Series(series).ewm(span=span, adjust=False).mean().values
-
-
-def run_macd_strategy(df):
-
-    k = build_kbar(df)
-    close = k["close"]
-
-    macd = ema(close, 12) - ema(close, 26)
-    signal = ema(macd, 9)
-
-    equity = 0
-    curve = []
-    trade = []
-
-    pos = 0
-    entry = 0
-    wins = losses = 0
-
-    fig, ax = plt.subplots()
-    ax.plot(macd, label="MACD")
-    ax.plot(signal, label="Signal")
-    ax.legend()
-
-    for i in range(1, len(close)):
-
-        if pos == 0 and macd[i] > signal[i] and macd[i-1] <= signal[i-1]:
-            pos = 1
-            entry = close[i]
-            trade.append({"time": k["time"][i], "type": "BUY", "price": entry})
-
-        elif pos == 1 and macd[i] < signal[i] and macd[i-1] >= signal[i-1]:
-            pnl = close[i] - entry
-            equity += pnl
-            pos = 0
-
-            trade.append({"time": k["time"][i], "type": "SELL", "price": close[i], "pnl": pnl})
-
-            wins += pnl > 0
-            losses += pnl <= 0
-
-        curve.append(equity)
-
-    if pos == 1:
-        equity += close[-1] - entry
-
-    return pack(equity, curve, trade, wins, losses, fig)
-
-
-# =========================
-# RSI
-# =========================
-def calc_rsi(close, period=14):
+def RSI(close, period=14):
 
     close = pd.Series(close)
 
     delta = close.diff()
+
     gain = delta.clip(lower=0)
     loss = -delta.clip(upper=0)
 
-    avg_gain = gain.rolling(period).mean()
-    avg_loss = loss.rolling(period).mean()
+    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
 
-    rs = avg_gain / avg_loss
+    rs = avg_gain / (avg_loss + 1e-9)
+
     rsi = 100 - (100 / (1 + rs))
 
     return rsi.values
 
 
-def run_rsi_strategy(df):
+# =========================
+# MACD（修正版）
+# =========================
+def MACD(close):
 
-    k = build_kbar(df)
-    close = k["close"]
-    time = k["time"]
+    close = pd.Series(close)
 
-    rsi = calc_rsi(close)
+    ema12 = close.ewm(span=12, adjust=False).mean()
+    ema26 = close.ewm(span=26, adjust=False).mean()
 
-    equity = 0
-    curve = []
-    trade = []
+    macd = ema12 - ema26
+    signal = macd.ewm(span=9, adjust=False).mean()
 
-    pos = 0
-    entry = 0
-    wins = losses = 0
-
-    fig, ax = plt.subplots()
-    ax.plot(rsi)
-    ax.axhline(70, color="red")
-    ax.axhline(30, color="green")
-
-    for i in range(1, len(close)):
-
-        if np.isnan(rsi[i]):
-            curve.append(equity)
-            continue
-
-        if rsi[i] < 30 and pos == 0:
-            pos = 1
-            entry = close[i]
-            trade.append({"time": time[i], "type": "BUY", "price": entry})
-
-        elif rsi[i] > 70 and pos == 1:
-            pnl = close[i] - entry
-            equity += pnl
-            pos = 0
-
-            trade.append({"time": time[i], "type": "SELL", "price": close[i], "pnl": pnl})
-
-            wins += pnl > 0
-            losses += pnl <= 0
-
-        curve.append(equity)
-
-    if pos == 1:
-        equity += close[-1] - entry
-
-    return pack(equity, curve, trade, wins, losses, fig)
+    return macd.values, signal.values
 
 
 # =========================
-# 布林通道
+# BBANDS（布林）
 # =========================
-def bollinger(close, period=20):
+def BBANDS(close, n=20):
 
-    mid = pd.Series(close).rolling(period).mean()
-    std = pd.Series(close).rolling(period).std()
+    close = pd.Series(close)
+
+    mid = close.rolling(n).mean()
+    std = close.rolling(n).std()
 
     upper = mid + 2 * std
     lower = mid - 2 * std
@@ -205,13 +74,10 @@ def bollinger(close, period=20):
     return upper.values, mid.values, lower.values
 
 
-def run_bollinger_strategy(df):
-
-    k = build_kbar(df)
-    close = k["close"]
-    time = k["time"]
-
-    upper, mid, lower = bollinger(close)
+# =========================
+# 回測核心（修正版：無偷看未來）
+# =========================
+def backtest(close, buy, sell, name):
 
     equity = 0
     curve = []
@@ -221,92 +87,180 @@ def run_bollinger_strategy(df):
     entry = 0
     wins = losses = 0
 
-    fig, ax = plt.subplots()
-    ax.plot(close)
-    ax.plot(upper)
-    ax.plot(lower)
+    for i in range(len(close)):
 
-    for i in range(1, len(close)):
+        if i == 0:
+            curve.append(0)
+            continue
 
-        if close[i] < lower[i] and pos == 0:
+        # ✔ 用 i-1 避免 look-ahead bias
+        if buy[i-1] and pos == 0:
             pos = 1
             entry = close[i]
-            trade.append({"time": time[i], "type": "BUY", "price": entry})
+            trade.append({"type": "BUY", "price": entry})
 
-        elif close[i] > upper[i] and pos == 1:
+        elif sell[i-1] and pos == 1:
             pnl = close[i] - entry
             equity += pnl
             pos = 0
 
-            trade.append({"time": time[i], "type": "SELL", "price": close[i], "pnl": pnl})
+            trade.append({"type": "SELL", "price": close[i], "pnl": pnl})
 
-            wins += pnl > 0
-            losses += pnl <= 0
+            if pnl > 0:
+                wins += 1
+            else:
+                losses += 1
 
         curve.append(equity)
 
+    # ✔ 強制平倉
     if pos == 1:
-        equity += close[-1] - entry
+        pnl = close[-1] - entry
+        equity += pnl
 
-    return pack(equity, curve, trade, wins, losses, fig)
-
-
-# =========================
-# 共用封裝
-# =========================
-def pack(equity, curve, trade, wins, losses, fig):
-
-    winrate = wins / (wins + losses) if (wins + losses) > 0 else 0
-    mdd = max_drawdown(curve)
-    sharpe = sharpe_ratio(curve)
+    fig, ax = plt.subplots()
+    ax.set_title(name)
+    ax.plot(curve)
 
     return {
         "profit": equity,
-        "winrate": winrate,
-        "mdd": mdd,
-        "sharpe": sharpe,
+        "winrate": wins / (wins + losses) if (wins + losses) > 0 else 0,
+        "mdd": max_drawdown(curve),
+        "sharpe": sharpe_ratio(curve),
         "equity_curve": curve,
         "trade_record": trade,
         "fig": fig
     }
 
 
+# =========================
+# RSI策略
+# =========================
+def run_rsi_strategy(df):
+
+    close, _, _ = build_kbar(df)
+    rsi = RSI(close)
+
+    buy = rsi < 30
+    sell = rsi > 70
+
+    return backtest(close, buy, sell, "RSI")
+
+
+# =========================
+# 布林通道策略
+# =========================
+def run_bollinger_strategy(df):
+
+    close, _, _ = build_kbar(df)
+    upper, mid, lower = BBANDS(close)
+
+    buy = close < lower
+    sell = close > upper
+
+    return backtest(close, buy, sell, "Bollinger")
+
+
+# =========================
+# MA策略
+# =========================
+def run_ma_strategy(df):
+
+    close, _, _ = build_kbar(df)
+
+    sma_s = SMA(close, 5)
+    sma_l = SMA(close, 20)
+
+    buy = sma_s > sma_l
+    sell = sma_s < sma_l
+
+    return backtest(close, buy, sell, "MA")
+
+
+# =========================
+# MACD策略
+# =========================
+def run_macd_strategy(df):
+
+    close, _, _ = build_kbar(df)
+
+    macd, sig = MACD(close)
+
+    buy = macd > sig
+    sell = macd < sig
+
+    return backtest(close, buy, sell, "MACD")
+
+
+# =========================
+# KDJ策略（修正版）
+# =========================
+def run_kdj_strategy(df):
+
+    close, high, low = build_kbar(df)
+
+    low_min = pd.Series(low).rolling(9).min()
+    high_max = pd.Series(high).rolling(9).max()
+
+    rsv = (close - low_min) / (high_max - low_min + 1e-9)
+
+    k = pd.Series(rsv).rolling(3).mean().fillna(0).values
+
+    buy = k < 0.2
+    sell = k > 0.8
+
+    return backtest(close, buy, sell, "KDJ")
+
+
+# =========================
+# 評分排序（保留）
+# =========================
+def strategy_rank(results):
+
+    ranking = []
+
+    for name, r in results.items():
+
+        score = (
+            r["sharpe"] * 0.6 +
+            r["profit"] * 0.001 -
+            r["mdd"] * 0.5
+        )
+
+        ranking.append({
+            "strategy": name,
+            "score": score,
+            "profit": r["profit"],
+            "sharpe": r["sharpe"],
+            "mdd": r["mdd"]
+        })
+
+    return sorted(ranking, key=lambda x: x["score"], reverse=True)
+
+
+# =========================
+# 最大回撤
+# =========================
 def max_drawdown(curve):
+
     peak = -1e9
     mdd = 0
+
     for x in curve:
         peak = max(peak, x)
         mdd = max(mdd, peak - x)
+
     return mdd
 
 
+# =========================
+# Sharpe Ratio
+# =========================
 def sharpe_ratio(curve):
-    r = pd.Series(curve).diff().fillna(0)
-    return 0 if r.std() == 0 else r.mean() / r.std()
 
+    r = np.diff(curve)
 
-# =========================
-# MA最佳化
-# =========================
-def optimize_ma(df):
+    if len(r) == 0 or np.std(r) == 0:
+        return 0
 
-    best = None
-    best_score = -1e9
-    best_params = None
-
-    for s in range(5, 30, 5):
-        for l in range(10, 60, 10):
-
-            if s >= l:
-                continue
-
-            result = run_ma_strategy(df, s, l)
-
-            score = result["sharpe"] * 100 + result["profit"] - result["mdd"] * 2
-
-            if score > best_score:
-                best_score = score
-                best = result
-                best_params = (s, l)
-
-    return best, best_params, best_score
+    return np.mean(r) / (np.std(r) + 1e-9)
