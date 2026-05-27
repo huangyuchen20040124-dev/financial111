@@ -5,9 +5,11 @@ from strategy import run_ma_strategy
 
 st.title("量化交易回測系統")
 
-df = pd.read_pickle(
+df = pd.read_excel(
     "kbars_1d_2330_2020-01-02_To_2025-03-04.xlsx"
 )
+
+st.write(df.head())
 
 if st.button("開始回測"):
 
