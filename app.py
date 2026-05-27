@@ -6,7 +6,7 @@ from strategy import run_ma_strategy
 st.title("量化交易回測系統")
 
 df = pd.read_pickle(
-    "kbars_2330_2022-01-01-2024-04-09.pkl"
+    "kbars_1d_2330_2020-01-02_To_2025-03-04.xlsx"
 )
 
 if st.button("開始回測"):
