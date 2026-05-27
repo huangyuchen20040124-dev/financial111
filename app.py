@@ -1,8 +1,3 @@
-import strategy
-import streamlit as st
-
-st.write("strategy OK")
-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -13,29 +8,31 @@ from strategy import (
     run_kdj_strategy,
     run_rsi_strategy,
     run_bollinger_strategy,
-    strategy_rank,
-    optimize_ma
+    strategy_rank
 )
 
 st.set_page_config(layout="wide")
-st.title("📊 量化交易策略回測系統")
+st.title("📊 量化交易回測系統")
 
 
+# =========================
+# 讀資料
+# =========================
 df = pd.read_excel("kbars_1d_2330_2020-01-02_To_2025-03-04.xlsx")
 df["time"] = pd.to_datetime(df["time"])
 
 
 # =========================
-# 日期
+# 日期（已修正）
 # =========================
-start = pd.to_datetime(st.sidebar.date_input("開始", "2022-01-01"))
-end = pd.to_datetime(st.sidebar.date_input("結束", "2025-03-04"))
+start = pd.to_datetime(st.sidebar.date_input("開始日期", "2022-01-01"))
+end = pd.to_datetime(st.sidebar.date_input("結束日期", "2025-03-04"))
 
 df = df[(df["time"] >= start) & (df["time"] <= end)]
 
 
 # =========================
-# 執行
+# 回測
 # =========================
 if st.button("開始回測"):
 
@@ -51,13 +48,12 @@ if st.button("開始回測"):
     # =========================
     # 🏆 排行榜
     # =========================
-    st.subheader("🏆 策略排行榜")
+    st.subheader("策略排行榜")
 
     ranking = strategy_rank(results)
-
     rank_df = pd.DataFrame(ranking)
-    st.dataframe(rank_df)
 
+    st.dataframe(rank_df)
 
     best = ranking[0]["strategy"]
     st.success(f"最佳策略：{best}")
@@ -68,15 +64,12 @@ if st.button("開始回測"):
     # =========================
     result = results[best]
 
-
     col1, col2, col3 = st.columns(3)
-
     col1.metric("Profit", round(result["profit"], 2))
     col2.metric("Winrate", f"{result['winrate']*100:.2f}%")
     col3.metric("MDD", round(result["mdd"], 2))
 
     st.metric("Sharpe", round(result["sharpe"], 2))
-
 
     st.pyplot(result["fig"])
 
@@ -86,4 +79,5 @@ if st.button("開始回測"):
     st.pyplot(fig2)
 
 
+    st.subheader("交易紀錄")
     st.dataframe(pd.DataFrame(result["trade_record"]))
