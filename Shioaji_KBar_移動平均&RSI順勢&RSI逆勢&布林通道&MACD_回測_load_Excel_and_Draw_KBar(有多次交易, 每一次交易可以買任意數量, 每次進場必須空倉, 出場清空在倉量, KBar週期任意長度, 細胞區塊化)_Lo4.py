@@ -466,151 +466,85 @@ OrderRecord.GeneratorProfitChart(StrategyName='BBands Strategy')
 
 #%%
 ###### (五) MACD 策略   
-## 對於日K, 以下的三個數字時常設定為(依序): 12, 26, 9
-Fastperiod = 12    #15
-Slowperiod = 26    #20
-Signalperiod = 9   #9
+#%%
+        if KBar_dic['close'][n] - MoveStopLoss > StopLossPoint:
+            StopLossPoint = KBar_dic['close'][n] - MoveStopLoss
 
-## 不同名稱:
-'''
-1. TA-Lib MACD 回傳值命名：
- macd       = MACD line = DIF = EMA(price,fastperiod) - EMA(price,slowperiod)
- macdsignal = Signal line = DEA = EMA(DIF, signalperiod)
- macdhist   = Histogram = DIF - DEA
 
-2. 注意：
-  某些中文教材/軟體會把 DEA 稱為 MACD 線，
-  也會把柱狀圖稱為 MACD(老師提供的資料即是此情況)。
-  但在 TA-Lib 中，macd 指的是 DIF，不是 DEA，也不是柱狀圖。
-3. 老師提供的資料 與 TA-Lib 名稱對照(左邊TA-Lib, 右邊老師資料): macd="DIF", macdsignal="DEA", macdhist="DIF-DEA"="MACD"
-'''
-KBar_dic['macd'],KBar_dic['macdsignal'],KBar_dic['macdhist']=MACD(KBar_dic,fastperiod=Fastperiod, slowperiod=Slowperiod, signalperiod=Signalperiod)
+        # 停損出場
+        elif KBar_dic['close'][n] < StopLossPoint:
 
-##### 策略
-'''
- 1. 多方進場: macdhist>0; 多方出場: macdhist<0
- 2. 多方: macdhist>0 且 macdsignal>0
- 3. 黃金交叉 (Buy)：快線（DIF）由下往上穿越慢線（DEA），柱狀體由負轉正，視為買進訊號(多方):
-    macd 向上突破 macdsignal(黃金交叉))=macdhist從負的變成正的  
- 4. 死亡交叉 (Sell)：快線（DIF）由上往下穿越慢線（DEA），柱狀體由正轉負，視為賣出訊號(空方):
-    macd 向下突破 macdsignal(死亡交叉))=macdhist從正的變成負的
- 5. 多方: macd>0 且 macdsignal>0 且 (macd 向上突破 macdsignal(黃金交叉))=macdhist從負的變成正的
- 6. 空方: macd<0 且 macdsignal<0 且 (macd 向下突破 macdsignal(死亡交叉))=macdhist從正的變成負的
- 7 背離:
-   (1)、MACD多頭背離（底背離）:
-       當價格創新低，但 MACD 指標卻沒有跟上，DIF 線與 MACD 線反而向上推移，柱狀體也未能給出相對動能，出現了多頭背離的狀況，表示空頭行情即將或已經到底，有較高的機率出現反轉，被視為「買進訊號」。
+            OrderRecord.Cover(
+                'Sell',
+                KBar_dic['product'][n+1],
+                KBar_dic['time'][n+1],
+                KBar_dic['open'][n+1],
+                OrderRecord.GetOpenInterest()
+            )
+            continue
 
-   (2)、MACD空頭背離（頂背離）
-       當價格創新高，但 MACD 指標卻沒有跟上，DIF 線與 MACD 線反而向下推移，柱狀體也未能給出相對動能，出現了空頭背離的狀況，表示多頭行情即將或已經到頂，有較高的機率出現反轉，被視為「賣出訊號」。  
-'''
+
+        # K跌破D
+        elif K_now < D_now:
+
+            OrderRecord.Cover(
+                'Sell',
+                KBar_dic['product'][n+1],
+                KBar_dic['time'][n+1],
+                KBar_dic['open'][n+1],
+                OrderRecord.GetOpenInterest()
+            )
+            continue
+
+
+    ################################################
+    ###### 空單持有
+    ################################################
+    elif OrderRecord.GetOpenInterest() < 0:
+
+        # 更新停損
+        if KBar_dic['close'][n] + MoveStopLoss < StopLossPoint:
+            StopLossPoint = KBar_dic['close'][n] + MoveStopLoss
+
+
+        # 停損出場
+        elif KBar_dic['close'][n] > StopLossPoint:
+
+            OrderRecord.Cover(
+                'Buy',
+                KBar_dic['product'][n+1],
+                KBar_dic['time'][n+1],
+                KBar_dic['open'][n+1],
+                -OrderRecord.GetOpenInterest()
+            )
+            continue
+
+
+        # 黃金交叉回補
+        elif K_now > D_now:
+
+            OrderRecord.Cover(
+                'Buy',
+                KBar_dic['product'][n+1],
+                KBar_dic['time'][n+1],
+                KBar_dic['open'][n+1],
+                -OrderRecord.GetOpenInterest()
+            )
+            continue
 
 
 #%%
-###### (六) KDJ 策略 
-##### 設定 STOCH 的參數
-'''
-1. STOCH 的輸出入型式:
-slowk, slowd = STOCH(
-    high,
-    low,
-    close,
-    fastk_period=5,
-    slowk_period=3,
-    slowk_matype=0,
-    slowd_period=3,
-    slowd_matype=0
+###### KDJ 績效輸出
+
+print('====== KDJ Strategy ======')
+print('交易紀錄:\n', OrderRecord.GetTradeRecord())
+print('\n')
+print('利潤清單:', OrderRecord.GetProfit())
+print('淨利:', OrderRecord.GetTotalProfit())
+print('勝率:', OrderRecord.GetWinRate())
+print('最大連續虧損:', OrderRecord.GetAccLoss())
+print('最大回落:', OrderRecord.GetMDD())
+
+OrderRecord.GeneratorProfitChart(
+    StrategyName='KDJ_Strategy'
 )
-
-
-2. TA-Lib STOCH 參數說明：
-參數名	        	    預設值
-fastk_period	    	      5
-slowk_period	          3
-slowk_matype	    	      0
-slowd_period	    	      3
-slowd_matype	    	      0
-
-(1) fastk_period:
-    計算 RSV / fast %K 的區間長度。
-    RSV = (Close - N期最低價) / (N期最高價 - N期最低價) * 100
-
-(2) slowk_period:
-    將 fast %K 平滑成 slow %K 的期數。
-    slowk = MA(fastk, slowk_period, slowk_matype)
-
-(3) slowk_matype:
-    slowk 使用的移動平均方法。
-    0 = SMA, 1 = EMA, 2 = WMA, ...
-
-(4) slowd_period:
-    將 slowk 平滑成 slowd 的期數。
-    slowd = MA(slowk, slowd_period, slowd_matype)
-
-(5)slowd_matype:
-    slowd 使用的移動平均方法。
-    0 = SMA, 1 = EMA, 2 = WMA, ...
-
-注意：
-    即使 slowk_matype 或 slowd_matype 改成 EMA，
-    slowk_period 與 slowd_period 仍然需要設定。
-    matype 決定平滑方法，period 決定平滑期數。
-'''
-
-params = {
-    'fastk_period': 5,
-    'slowk_period': 3,
-    'slowk_matype': 0,
-    'slowd_period': 3,
-    'slowd_matype': 0
-}
-
-##### 計算 STOCH 指標
-stoch = STOCH(KBar_dic, **params)
-
-## STOCH(KBar_dic, **params) 回傳的 stoch 不是 DataFrame，而是 list / tuple，所以不能用字串 'slowk' 當索引。
-## 不同 TA-Lib / pandas 版本可能回傳不同型態：
-## 1. DataFrame / dict-like：可用欄位名稱 'slowk'、'slowd'
-## 2. list / tuple：必須用整數索引 0、1
-if isinstance(stoch, (list, tuple)):
-    KBar_dic['slowk'] = np.asarray(stoch[0], dtype=np.float64)
-    KBar_dic['slowd'] = np.asarray(stoch[1], dtype=np.float64)
-else:
-    KBar_dic['slowk'] = np.asarray(stoch['slowk'], dtype=np.float64)
-    KBar_dic['slowd'] = np.asarray(stoch['slowd'], dtype=np.float64)
-KBar_dic['J'] = 3 * KBar_dic['slowk'] - 2 * KBar_dic['slowd']
-
-##### 策略:
-'''
-隨機指標 KDJ 的設計，首先計算最高價、最低價和收盤價之間的比例關係，再運用均線平滑及乖離的思想，據以捕捉動量及超買超賣等現象，在實務上對快速直觀地研判行情很有助益。
-以下介紹 3 種簡單的 KDJ 指標交易策略:
-
-1.在 KDJ 指標的取值上，K 值與 D 值的取值範圍是 0 到 100, 類似RSI。
- 依據 K 值與 D 值可以劃分出超買超賣區，一般而言，K 值或者 D 值取值在 80 以上為超買區；K 值或者 D 值取值在 20 以下為超賣區。
-
-2.對於 J 值，當 J 值大於 100 時，可以視為超買區，當 J 值小於 0 時，視為超賣區。
-
-3.K 線、D 線的交叉情況也可以釋放出買入賣出信號:
- (1)當 K 線由下向上穿過 D 線時，即出現所謂「黃金交叉」現象，隱含股票價格上漲的動量較大，釋放出買入信號；
- (2)當 K 線由上向下穿過 D 線時，出現「死亡交叉」現象，股票有下跌的趨勢，釋放出賣出信號。
-'''
-
-
-
-
-
-# #%%
-# ### Pandas DataFrame items() Method:
-# data = {
-#   "firstname": ["Sally", "Mary", "John"],
-#   "age": [50, 40, 30]
-# }
-# df_demo = pd.DataFrame(data)
-# df_demo.head()
-
-# for x, y in df_demo["firstname"].items():
-#     print(x)
-#     print(y)
-
-# for x, y in df_demo["age"].items():
-#     print(x)
-#     print(y)
