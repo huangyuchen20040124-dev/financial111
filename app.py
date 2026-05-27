@@ -7,7 +7,10 @@ from strategy import (
     run_ma_strategy,
     run_macd_strategy,
     run_kdj_strategy,
-    optimize_ma
+    run_rsi_strategy,
+    run_bollinger_strategy,
+    optimize_ma,
+    strategy_rank
 )
 
 
@@ -150,4 +153,24 @@ if st.button("開始回測"):
 
     st.write(text)
 
-   
+       # =====================
+    # 策略排行榜
+    # =====================
+    st.subheader("🏆 策略排行榜")
+
+    ranking_results = {
+
+        "MA策略": run_ma_strategy(df),
+
+        "MACD策略": run_macd_strategy(df),
+
+        "KDJ策略": run_kdj_strategy(df),
+
+        "RSI策略": run_rsi_strategy(df),
+
+        "布林通道策略": run_bollinger_strategy(df)
+    }
+
+    rank_df = strategy_rank(ranking_results)
+
+    st.dataframe(rank_df)
