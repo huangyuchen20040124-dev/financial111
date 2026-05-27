@@ -9,7 +9,6 @@ from strategy import (
     run_kdj_strategy
 )
 
-
 # =========================
 # UI設定
 # =========================
@@ -20,14 +19,40 @@ st.title("台積電量化交易回測系統")
 # =========================
 # 讀資料
 # =========================
-try:
-    df = pd.read_excel("kbars_1d_2330_2020-01-02_To_2025-03-04.xlsx")
-    st.success("資料讀取成功")
-except Exception as e:
-    st.error(f"讀取失敗: {e}")
-    st.stop()
+df = pd.read_excel("kbars_1d_2330_2020-01-02_To_2025-03-04.xlsx")
 
+df["time"] = pd.to_datetime(df["time"])
+
+st.success("資料讀取成功")
 st.dataframe(df.head())
+
+
+# =========================
+# 📅 時間篩選（新增）
+# =========================
+time_range = st.sidebar.selectbox(
+    "選擇回測區間",
+    [
+        "全部資料",
+        "最近1年",
+        "最近2年",
+        "最近3年"
+    ]
+)
+
+latest_date = df["time"].max()
+
+if time_range == "最近1年":
+    df = df[df["time"] >= latest_date - pd.DateOffset(years=1)]
+
+elif time_range == "最近2年":
+    df = df[df["time"] >= latest_date - pd.DateOffset(years=2)]
+
+elif time_range == "最近3年":
+    df = df[df["time"] >= latest_date - pd.DateOffset(years=3)]
+
+
+st.write(f"回測資料期間：{df['time'].min()} ~ {df['time'].max()}")
 
 
 # =========================
@@ -69,11 +94,15 @@ if st.button("開始回測"):
 
 
     # =========================
-    # 圖
+    # 策略圖
     # =========================
     st.subheader("策略圖")
     st.pyplot(result["fig"])
 
+
+    # =========================
+    # Equity Curve
+    # =========================
     st.subheader("Equity Curve")
 
     fig2, ax2 = plt.subplots()
@@ -90,7 +119,6 @@ if st.button("開始回測"):
 
     trade_df = pd.DataFrame(result["trade_record"])
     st.dataframe(trade_df)
-
 
     csv = trade_df.to_csv(index=False).encode("utf-8-sig")
 
