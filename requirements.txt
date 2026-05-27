@@ -1,8 +1,8 @@
 
-numpy
+streamlit
 pandas
+numpy
 matplotlib
 mplfinance
-TA-Lib
 openpyxl
-streamlit
+TA-Lib
