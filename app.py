@@ -1,3 +1,7 @@
+import strategy
+import streamlit as st
+
+st.write("strategy imported OK")
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
