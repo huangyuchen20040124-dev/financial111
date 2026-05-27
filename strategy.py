@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from talib.abstract import SMA, MACD, STOCH
+from talib.abstract import SMA, MACD, STOCH, RSI, BBANDS
 
 
 # =========================
@@ -172,7 +172,62 @@ def run_kdj_strategy(df):
 
 
 # =========================
-# 回傳
+# 🆕 Swing策略（RSI + 布林通道）
+# =========================
+def run_swing_strategy(df):
+
+    k = build_kbar(df)
+    close = k["close"]
+
+    rsi = RSI(k, timeperiod=14)
+    upper, mid, lower = BBANDS(k, timeperiod=20)
+
+    equity = 0
+    equity_curve = []
+    trade = []
+
+    pos = 0
+    entry = 0
+    wins = losses = 0
+
+    fig, ax = plt.subplots()
+    ax.plot(rsi, label="RSI")
+    ax.axhline(70, color="red")
+    ax.axhline(30, color="green")
+    ax.legend()
+
+    for i in range(len(close)):
+
+        if np.isnan(rsi[i]):
+            equity_curve.append(equity)
+            continue
+
+        # BUY
+        if rsi[i] < 30 and close[i] < lower[i] and pos == 0:
+            pos = 1
+            entry = close[i]
+            trade.append({"type": "BUY", "price": entry})
+
+        # SELL
+        elif rsi[i] > 70 and close[i] > upper[i] and pos == 1:
+            pnl = close[i] - entry
+            equity += pnl
+            pos = 0
+
+            trade.append({"type": "SELL", "price": close[i], "pnl": pnl})
+
+            if pnl > 0:
+                wins += 1
+            else:
+                losses += 1
+
+        equity_curve.append(equity)
+
+    return pack(equity, equity_curve, trade, wins, losses, fig)
+
+
+# =========================
+# 回傳封裝
 # =========================
 def pack(equity, curve, trade, wins, losses, fig):
 
@@ -214,7 +269,7 @@ def sharpe_ratio(curve):
 
 
 # =========================
-
+# MA最佳化
 # =========================
 def optimize_ma(df):
 
