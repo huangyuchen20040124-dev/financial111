@@ -73,7 +73,7 @@ def BBANDS(close, n=20):
 
 
 # =========================
-# 回測核心
+# 回測核心（穩定版）
 # =========================
 def backtest(close, buy, sell, name):
 
@@ -85,16 +85,13 @@ def backtest(close, buy, sell, name):
     entry = 0
     wins = losses = 0
 
-    fig, ax = plt.subplots()
-    ax.set_title(name)
-
     for i in range(len(close)):
 
         if i == 0:
             curve.append(0)
             continue
 
-        # ✔ 防止未來函數（i-1）
+        # 防止未來函數（避免 look-ahead bias）
         if buy[i-1] and pos == 0:
             pos = 1
             entry = close[i]
@@ -107,8 +104,10 @@ def backtest(close, buy, sell, name):
 
             trade.append({"type": "SELL", "price": close[i], "pnl": pnl})
 
-            wins += pnl > 0
-            losses += pnl <= 0
+            if pnl > 0:
+                wins += 1
+            else:
+                losses += 1
 
         curve.append(equity)
 
@@ -116,6 +115,8 @@ def backtest(close, buy, sell, name):
     if pos == 1:
         equity += close[-1] - entry
 
+    fig, ax = plt.subplots()
+    ax.set_title(name)
     ax.plot(curve)
 
     return {
@@ -130,71 +131,119 @@ def backtest(close, buy, sell, name):
 
 
 # =========================
-# RSI策略
+# RSI策略（完整可用）
 # =========================
 def run_rsi_strategy(df):
+
     close, _, _ = build_kbar(df)
     rsi = RSI(close)
-    return backtest(close, rsi < 30, rsi > 70, "RSI")
+
+    rsi = np.nan_to_num(rsi, nan=50)
+
+    buy = rsi < 30
+    sell = rsi > 70
+
+    return backtest(close, buy, sell, "RSI")
 
 
 # =========================
 # MACD策略
 # =========================
 def run_macd_strategy(df):
+
     close, _, _ = build_kbar(df)
     macd, sig = MACD(close)
-    return backtest(close, macd > sig, macd < sig, "MACD")
+
+    macd = np.nan_to_num(macd, nan=0)
+    sig = np.nan_to_num(sig, nan=0)
+
+    buy = macd > sig
+    sell = macd < sig
+
+    return backtest(close, buy, sell, "MACD")
 
 
 # =========================
 # MA策略
 # =========================
 def run_ma_strategy(df):
+
     close, _, _ = build_kbar(df)
+
     sma_s = SMA(close, 5)
     sma_l = SMA(close, 20)
-    return backtest(close, sma_s > sma_l, sma_s < sma_l, "MA")
+
+    sma_s = np.nan_to_num(sma_s, nan=0)
+    sma_l = np.nan_to_num(sma_l, nan=0)
+
+    buy = sma_s > sma_l
+    sell = sma_s < sma_l
+
+    return backtest(close, buy, sell, "MA")
 
 
 # =========================
-# BB策略
+# 布林通道策略（完整可用）
 # =========================
 def run_bollinger_strategy(df):
+
     close, _, _ = build_kbar(df)
+
     upper, mid, lower = BBANDS(close)
-    return backtest(close, close < lower, close > upper, "BB")
+
+    upper = np.nan_to_num(upper, nan=np.inf)
+    lower = np.nan_to_num(lower, nan=-np.inf)
+    mid = np.nan_to_num(mid, nan=np.mean(close))
+
+    buy = close < lower
+    sell = close > upper
+
+    return backtest(close, buy, sell, "Bollinger")
 
 
 # =========================
-# KDJ（簡化版）
+# KDJ策略（穩定版）
 # =========================
 def run_kdj_strategy(df):
+
     close, high, low = build_kbar(df)
 
     low_min = pd.Series(low).rolling(9).min()
     high_max = pd.Series(high).rolling(9).max()
 
     rsv = (close - low_min) / (high_max - low_min + 1e-9)
+
     k = pd.Series(rsv).rolling(3).mean().fillna(0).values
 
-    return backtest(close, k < 0.2, k > 0.8, "KDJ")
+    buy = k < 0.2
+    sell = k > 0.8
+
+    return backtest(close, buy, sell, "KDJ")
 
 
 # =========================
-# 指標
+# 指標：最大回撤
 # =========================
 def max_drawdown(curve):
+
     peak = -1e9
     mdd = 0
+
     for x in curve:
         peak = max(peak, x)
         mdd = max(mdd, peak - x)
+
     return mdd
 
 
+# =========================
+# Sharpe Ratio
+# =========================
 def sharpe_ratio(curve):
+
     r = np.diff(curve)
+
     if len(r) == 0 or np.std(r) == 0:
         return 0
+
     return np.mean(r) / (np.std(r) + 1e-9)
