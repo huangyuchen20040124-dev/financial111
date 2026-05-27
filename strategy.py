@@ -23,11 +23,11 @@ def build_kbar(df):
 # =========================
 def run_ma_strategy(df, short=5, long=20):
 
-    kbar = build_kbar(df)
-    close = kbar['close']
+    k = build_kbar(df)
+    close = k['close']
 
-    sma_s = SMA(kbar, timeperiod=short)
-    sma_l = SMA(kbar, timeperiod=long)
+    sma_s = SMA(k, timeperiod=short)
+    sma_l = SMA(k, timeperiod=long)
 
     equity = 0
     equity_curve = []
@@ -35,12 +35,12 @@ def run_ma_strategy(df, short=5, long=20):
 
     pos = 0
     entry = 0
-
     wins = losses = 0
 
     fig, ax = plt.subplots()
     ax.plot(sma_s, label="SMA short")
     ax.plot(sma_l, label="SMA long")
+    ax.legend()
 
     for i in range(len(close)):
 
@@ -69,18 +69,18 @@ def run_ma_strategy(df, short=5, long=20):
 
         equity_curve.append(equity)
 
-    return pack_result(equity, equity_curve, trade, wins, losses, fig)
+    return pack(equity, equity_curve, trade, wins, losses, fig)
 
 
 # =========================
-# MACD策略
+# MACD
 # =========================
 def run_macd_strategy(df):
 
-    kbar = build_kbar(df)
-    close = kbar['close']
+    k = build_kbar(df)
+    close = k['close']
 
-    macd, signal, hist = MACD(kbar)
+    macd, signal, hist = MACD(k)
 
     equity = 0
     equity_curve = []
@@ -88,12 +88,12 @@ def run_macd_strategy(df):
 
     pos = 0
     entry = 0
-
     wins = losses = 0
 
     fig, ax = plt.subplots()
     ax.plot(macd, label="MACD")
     ax.plot(signal, label="Signal")
+    ax.legend()
 
     for i in range(len(close)):
 
@@ -101,13 +101,11 @@ def run_macd_strategy(df):
             equity_curve.append(equity)
             continue
 
-        # BUY
         if macd[i] > signal[i] and macd[i-1] <= signal[i-1] and pos == 0:
             pos = 1
             entry = close[i]
             trade.append({"type": "BUY", "price": entry})
 
-        # SELL
         elif macd[i] < signal[i] and macd[i-1] >= signal[i-1] and pos == 1:
             pnl = close[i] - entry
             equity += pnl
@@ -122,18 +120,18 @@ def run_macd_strategy(df):
 
         equity_curve.append(equity)
 
-    return pack_result(equity, equity_curve, trade, wins, losses, fig)
+    return pack(equity, equity_curve, trade, wins, losses, fig)
 
 
 # =========================
-# KDJ策略
+# KDJ
 # =========================
 def run_kdj_strategy(df):
 
-    kbar = build_kbar(df)
-    close = kbar['close']
+    k = build_kbar(df)
+    close = k['close']
 
-    slowk, slowd = STOCH(kbar)
+    slowk, slowd = STOCH(k)
 
     equity = 0
     equity_curve = []
@@ -141,12 +139,12 @@ def run_kdj_strategy(df):
 
     pos = 0
     entry = 0
-
     wins = losses = 0
 
     fig, ax = plt.subplots()
     ax.plot(slowk, label="K")
     ax.plot(slowd, label="D")
+    ax.legend()
 
     for i in range(len(close)):
 
@@ -154,13 +152,11 @@ def run_kdj_strategy(df):
             equity_curve.append(equity)
             continue
 
-        # BUY
         if slowk[i] < 20 and slowk[i] > slowd[i] and pos == 0:
             pos = 1
             entry = close[i]
             trade.append({"type": "BUY", "price": entry})
 
-        # SELL
         elif slowk[i] > 80 and slowk[i] < slowd[i] and pos == 1:
             pnl = close[i] - entry
             equity += pnl
@@ -175,24 +171,24 @@ def run_kdj_strategy(df):
 
         equity_curve.append(equity)
 
-    return pack_result(equity, equity_curve, trade, wins, losses, fig)
+    return pack(equity, equity_curve, trade, wins, losses, fig)
 
 
 # =========================
-# 評估指標
+# 評估包裝
 # =========================
-def pack_result(equity, equity_curve, trade, wins, losses, fig):
+def pack(equity, curve, trade, wins, losses, fig):
 
     winrate = wins / (wins + losses) if (wins + losses) > 0 else 0
-    mdd = max_drawdown(equity_curve)
-    sharpe = sharpe_ratio(equity_curve)
+    mdd = max_drawdown(curve)
+    sharpe = sharpe_ratio(curve)
 
     return {
         "profit": equity,
         "winrate": winrate,
         "mdd": mdd,
         "sharpe": sharpe,
-        "equity_curve": equity_curve,
+        "equity_curve": curve,
         "trade_record": trade,
         "fig": fig
     }
@@ -214,7 +210,7 @@ def max_drawdown(curve):
 
 
 # =========================
-# Sharpe Ratio（簡化版）
+# Sharpe
 # =========================
 def sharpe_ratio(curve):
 
