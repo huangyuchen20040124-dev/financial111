@@ -16,7 +16,7 @@ import pandas as pd
 
 #%%
 ###### 資料讀入與前處理
-df = pd.read_excel("kbars_2330_2022-01-01-2024-04-09.xlsx", index_col=0)
+df = pd.read_excel("kbars_1d_2330_2020-01-02_To_2025-03-04", index_col=0)
 df.columns
 df.head()
 
