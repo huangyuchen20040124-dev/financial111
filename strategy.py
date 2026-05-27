@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from talib.abstract import SMA, MACD, RSI, BBANDS, STOCH
+from talib.abstract import SMA, MACD, STOCH, RSI, BBANDS
 
 
 # =========================
@@ -18,12 +18,18 @@ def build_kbar(df):
 
 
 # =========================
-# 通用回測
+# MA策略
 # =========================
-def backtest(close, buy, sell, name):
+def run_ma_strategy(df, short=5, long=20):
+
+    k = build_kbar(df)
+    close = k["close"]
+
+    sma_s = SMA(k, timeperiod=short)
+    sma_l = SMA(k, timeperiod=long)
 
     equity = 0
-    curve = []
+    equity_curve = []
     trade = []
 
     pos = 0
@@ -31,20 +37,22 @@ def backtest(close, buy, sell, name):
     wins = losses = 0
 
     fig, ax = plt.subplots()
-    ax.set_title(name)
+    ax.plot(sma_s, label="SMA short")
+    ax.plot(sma_l, label="SMA long")
+    ax.legend()
 
     for i in range(len(close)):
 
-        if i == 0:
-            curve.append(0)
+        if np.isnan(sma_s[i]) or np.isnan(sma_l[i]):
+            equity_curve.append(equity)
             continue
 
-        if buy[i] and not buy[i-1] and pos == 0:
+        if sma_s[i] > sma_l[i] and sma_s[i-1] <= sma_l[i-1] and pos == 0:
             pos = 1
             entry = close[i]
             trade.append({"type": "BUY", "price": entry})
 
-        elif sell[i] and not sell[i-1] and pos == 1:
+        elif sma_s[i] < sma_l[i] and sma_s[i-1] >= sma_l[i-1] and pos == 1:
             pnl = close[i] - entry
             equity += pnl
             pos = 0
@@ -56,26 +64,9 @@ def backtest(close, buy, sell, name):
             else:
                 losses += 1
 
-        curve.append(equity)
+        equity_curve.append(equity)
 
-    return pack(equity, curve, trade, wins, losses, fig)
-
-
-# =========================
-# MA策略
-# =========================
-def run_ma_strategy(df, short=5, long=20):
-
-    k = build_kbar(df)
-    close = k["close"]
-
-    sma_s = SMA(k, timeperiod=short)
-    sma_l = SMA(k, timeperiod=long)
-
-    buy = sma_s > sma_l
-    sell = sma_s < sma_l
-
-    return backtest(close, buy, sell, "MA")
+    return pack(equity, equity_curve, trade, wins, losses, fig)
 
 
 # =========================
@@ -86,12 +77,47 @@ def run_macd_strategy(df):
     k = build_kbar(df)
     close = k["close"]
 
-    macd, signal, _ = MACD(k)
+    macd, signal, hist = MACD(k)
 
-    buy = macd > signal
-    sell = macd < signal
+    equity = 0
+    equity_curve = []
+    trade = []
 
-    return backtest(close, buy, sell, "MACD")
+    pos = 0
+    entry = 0
+    wins = losses = 0
+
+    fig, ax = plt.subplots()
+    ax.plot(macd, label="MACD")
+    ax.plot(signal, label="Signal")
+    ax.legend()
+
+    for i in range(len(close)):
+
+        if np.isnan(macd[i]):
+            equity_curve.append(equity)
+            continue
+
+        if macd[i] > signal[i] and macd[i-1] <= signal[i-1] and pos == 0:
+            pos = 1
+            entry = close[i]
+            trade.append({"type": "BUY", "price": entry})
+
+        elif macd[i] < signal[i] and macd[i-1] >= signal[i-1] and pos == 1:
+            pnl = close[i] - entry
+            equity += pnl
+            pos = 0
+
+            trade.append({"type": "SELL", "price": close[i], "pnl": pnl})
+
+            if pnl > 0:
+                wins += 1
+            else:
+                losses += 1
+
+        equity_curve.append(equity)
+
+    return pack(equity, equity_curve, trade, wins, losses, fig)
 
 
 # =========================
@@ -102,44 +128,102 @@ def run_kdj_strategy(df):
     k = build_kbar(df)
     close = k["close"]
 
-    kdj_k, kdj_d = STOCH(k)
+    slowk, slowd = STOCH(k)
 
-    buy = kdj_k < 20
-    sell = kdj_k > 80
+    equity = 0
+    equity_curve = []
+    trade = []
 
-    return backtest(close, buy, sell, "KDJ")
+    pos = 0
+    entry = 0
+    wins = losses = 0
+
+    fig, ax = plt.subplots()
+    ax.plot(slowk, label="K")
+    ax.plot(slowd, label="D")
+    ax.legend()
+
+    for i in range(len(close)):
+
+        if np.isnan(slowk[i]):
+            equity_curve.append(equity)
+            continue
+
+        if slowk[i] < 20 and slowk[i] > slowd[i] and pos == 0:
+            pos = 1
+            entry = close[i]
+            trade.append({"type": "BUY", "price": entry})
+
+        elif slowk[i] > 80 and slowk[i] < slowd[i] and pos == 1:
+            pnl = close[i] - entry
+            equity += pnl
+            pos = 0
+
+            trade.append({"type": "SELL", "price": close[i], "pnl": pnl})
+
+            if pnl > 0:
+                wins += 1
+            else:
+                losses += 1
+
+        equity_curve.append(equity)
+
+    return pack(equity, equity_curve, trade, wins, losses, fig)
 
 
 # =========================
-# RSI策略（新增）
+# 🆕 Swing策略（RSI + 布林通道）
 # =========================
-def run_rsi_strategy(df):
+def run_swing_strategy(df):
 
     k = build_kbar(df)
     close = k["close"]
 
     rsi = RSI(k, timeperiod=14)
-
-    buy = rsi < 30
-    sell = rsi > 70
-
-    return backtest(close, buy, sell, "RSI")
-
-
-# =========================
-# 布林通道策略（新增）
-# =========================
-def run_bollinger_strategy(df):
-
-    k = build_kbar(df)
-    close = k["close"]
-
     upper, mid, lower = BBANDS(k, timeperiod=20)
 
-    buy = close < lower
-    sell = close > upper
+    equity = 0
+    equity_curve = []
+    trade = []
 
-    return backtest(close, buy, sell, "BB")
+    pos = 0
+    entry = 0
+    wins = losses = 0
+
+    fig, ax = plt.subplots()
+    ax.plot(rsi, label="RSI")
+    ax.axhline(70, color="red")
+    ax.axhline(30, color="green")
+    ax.legend()
+
+    for i in range(len(close)):
+
+        if np.isnan(rsi[i]):
+            equity_curve.append(equity)
+            continue
+
+        # BUY
+        if rsi[i] < 30 and close[i] < lower[i] and pos == 0:
+            pos = 1
+            entry = close[i]
+            trade.append({"type": "BUY", "price": entry})
+
+        # SELL
+        elif rsi[i] > 70 and close[i] > upper[i] and pos == 1:
+            pnl = close[i] - entry
+            equity += pnl
+            pos = 0
+
+            trade.append({"type": "SELL", "price": close[i], "pnl": pnl})
+
+            if pnl > 0:
+                wins += 1
+            else:
+                losses += 1
+
+        equity_curve.append(equity)
+
+    return pack(equity, equity_curve, trade, wins, losses, fig)
 
 
 # =========================
@@ -163,7 +247,7 @@ def pack(equity, curve, trade, wins, losses, fig):
 
 
 # =========================
-# MDD
+# 最大回撤
 # =========================
 def max_drawdown(curve):
     peak = -1e9
@@ -185,22 +269,31 @@ def sharpe_ratio(curve):
 
 
 # =========================
-# 🏆 排行榜
+# MA最佳化
 # =========================
-def strategy_rank(results):
+def optimize_ma(df):
 
-    ranking = []
+    best_result = None
+    best_score = -1e9
+    best_params = None
 
-    for name, r in results.items():
+    for short in range(5, 30, 5):
+        for long in range(10, 60, 10):
 
-        score = r["sharpe"] * 0.6 + r["profit"] * 0.001 - r["mdd"] * 0.5
+            if short >= long:
+                continue
 
-        ranking.append({
-            "strategy": name,
-            "score": score,
-            "profit": r["profit"],
-            "sharpe": r["sharpe"],
-            "mdd": r["mdd"]
-        })
+            result = run_ma_strategy(df, short, long)
 
-    return sorted(ranking, key=lambda x: x["score"], reverse=True)
+            score = (
+                result["sharpe"] * 0.6 +
+                result["profit"] * 0.001 -
+                result["mdd"] * 0.5
+            )
+
+            if score > best_score:
+                best_score = score
+                best_result = result
+                best_params = (short, long)
+
+    return best_result, best_params, best_score
