@@ -1,203 +1,64 @@
+import streamlit as st
+import pandas as pd
+import matplotlib.pyplot as plt
+
 from strategy import (
     run_ma_strategy,
     run_macd_strategy,
     run_kdj_strategy,
     run_rsi_strategy,
     run_bollinger_strategy
-
-
-# =========================
-# KBar
-# =========================
-def build_kbar(df):
-    close = df["close"].astype(float).values
-    high = df["high"].astype(float).values
-    low = df["low"].astype(float).values
-    return close, high, low
-
+)
 
 # =========================
-# SMA
-# =========================
-def SMA(arr, n):
-    return pd.Series(arr).rolling(n).mean().values
-
+st.set_page_config(page_title="回測系統", layout="wide")
+st.title("📊 台積電交易回測系統")
 
 # =========================
-# RSI
-# =========================
-def RSI(close, period=14):
+df = pd.read_excel("kbars_1d_2330_2020-01-02_To_2025-03-04.xlsx")
+df["time"] = pd.to_datetime(df["time"])
 
-    close = pd.Series(close)
+start = st.sidebar.date_input("開始日期")
+end = st.sidebar.date_input("結束日期")
 
-    delta = close.diff()
-
-    gain = delta.clip(lower=0)
-    loss = -delta.clip(upper=0)
-
-    avg_gain = gain.ewm(alpha=1/period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/period, adjust=False).mean()
-
-    rs = avg_gain / (avg_loss + 1e-9)
-
-    return (100 - (100 / (1 + rs))).values
-
+df = df[(df["time"] >= pd.to_datetime(start)) &
+        (df["time"] <= pd.to_datetime(end))]
 
 # =========================
-# MACD
-# =========================
-def MACD(close):
-
-    close = pd.Series(close)
-
-    ema12 = close.ewm(span=12, adjust=False).mean()
-    ema26 = close.ewm(span=26, adjust=False).mean()
-
-    macd = ema12 - ema26
-    signal = macd.ewm(span=9, adjust=False).mean()
-
-    return macd.values, signal.values
-
+strategy = st.sidebar.selectbox(
+    "選擇策略",
+    ["MA策略", "MACD策略", "KDJ策略", "RSI策略", "布林通道策略"]
+)
 
 # =========================
-# BBANDS
-# =========================
-def BBANDS(close, n=20):
+if st.button("開始回測"):
 
-    close = pd.Series(close)
+    if strategy == "MA策略":
+        result = run_ma_strategy(df)
 
-    mid = close.rolling(n).mean()
-    std = close.rolling(n).std()
+    elif strategy == "MACD策略":
+        result = run_macd_strategy(df)
 
-    upper = mid + 2 * std
-    lower = mid - 2 * std
+    elif strategy == "KDJ策略":
+        result = run_kdj_strategy(df)
 
-    return upper.values, mid.values, lower.values
+    elif strategy == "RSI策略":
+        result = run_rsi_strategy(df)
 
+    else:
+        result = run_bollinger_strategy(df)
 
-# =========================
-# 回測核心
-# =========================
-def backtest(close, buy, sell, name):
+    st.metric("Profit", round(result["profit"], 2))
+    st.metric("Winrate", f"{result['winrate']*100:.2f}%")
+    st.metric("MDD", round(result["mdd"], 2))
+    st.metric("Sharpe", round(result["sharpe"], 2))
 
-    equity = 0
-    curve = []
-    trade = []
+    st.pyplot(result["fig"])
 
-    pos = 0
-    entry = 0
-    wins = losses = 0
+    st.subheader("Equity Curve")
+    fig2, ax2 = plt.subplots()
+    ax2.plot(result["equity_curve"])
+    st.pyplot(fig2)
 
-    fig, ax = plt.subplots()
-    ax.set_title(name)
-
-    for i in range(len(close)):
-
-        if i == 0:
-            curve.append(0)
-            continue
-
-        # ✔ 防止未來函數（i-1）
-        if buy[i-1] and pos == 0:
-            pos = 1
-            entry = close[i]
-            trade.append({"type": "BUY", "price": entry})
-
-        elif sell[i-1] and pos == 1:
-            pnl = close[i] - entry
-            equity += pnl
-            pos = 0
-
-            trade.append({"type": "SELL", "price": close[i], "pnl": pnl})
-
-            wins += pnl > 0
-            losses += pnl <= 0
-
-        curve.append(equity)
-
-    # 強制平倉
-    if pos == 1:
-        equity += close[-1] - entry
-
-    ax.plot(curve)
-
-    return {
-        "profit": equity,
-        "winrate": wins / (wins + losses) if (wins + losses) > 0 else 0,
-        "mdd": max_drawdown(curve),
-        "sharpe": sharpe_ratio(curve),
-        "equity_curve": curve,
-        "trade_record": trade,
-        "fig": fig
-    }
-
-
-# =========================
-# RSI策略
-# =========================
-def run_rsi_strategy(df):
-    close, _, _ = build_kbar(df)
-    rsi = RSI(close)
-    return backtest(close, rsi < 30, rsi > 70, "RSI")
-
-
-# =========================
-# MACD策略
-# =========================
-def run_macd_strategy(df):
-    close, _, _ = build_kbar(df)
-    macd, sig = MACD(close)
-    return backtest(close, macd > sig, macd < sig, "MACD")
-
-
-# =========================
-# MA策略
-# =========================
-def run_ma_strategy(df):
-    close, _, _ = build_kbar(df)
-    sma_s = SMA(close, 5)
-    sma_l = SMA(close, 20)
-    return backtest(close, sma_s > sma_l, sma_s < sma_l, "MA")
-
-
-# =========================
-# BB策略
-# =========================
-def run_bollinger_strategy(df):
-    close, _, _ = build_kbar(df)
-    upper, mid, lower = BBANDS(close)
-    return backtest(close, close < lower, close > upper, "BB")
-
-
-# =========================
-# KDJ（簡化版）
-# =========================
-def run_kdj_strategy(df):
-    close, high, low = build_kbar(df)
-
-    low_min = pd.Series(low).rolling(9).min()
-    high_max = pd.Series(high).rolling(9).max()
-
-    rsv = (close - low_min) / (high_max - low_min + 1e-9)
-    k = pd.Series(rsv).rolling(3).mean().fillna(0).values
-
-    return backtest(close, k < 0.2, k > 0.8, "KDJ")
-
-
-# =========================
-# 指標
-# =========================
-def max_drawdown(curve):
-    peak = -1e9
-    mdd = 0
-    for x in curve:
-        peak = max(peak, x)
-        mdd = max(mdd, peak - x)
-    return mdd
-
-
-def sharpe_ratio(curve):
-    r = np.diff(curve)
-    if len(r) == 0 or np.std(r) == 0:
-        return 0
-    return np.mean(r) / (np.std(r) + 1e-9)
+    st.subheader("交易紀錄")
+    st.dataframe(pd.DataFrame(result["trade_record"]))
