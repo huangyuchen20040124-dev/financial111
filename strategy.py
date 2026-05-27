@@ -61,4 +61,9 @@ def run_ma_strategy(df, short_period, long_period):
         if (
             short_ma[n-1] <= long_ma[n-1]
             and
+            short_ma[n] > long_ma[n]
+        ):
+
+            trade_record.append({
+                'Signal': 'Buy',
     }
