@@ -8,13 +8,12 @@ from talib.abstract import SMA, MACD, STOCH
 # KBar
 # =========================
 def build_kbar(df):
-
     return {
-        'open': df['open'].astype(float).values,
-        'high': df['high'].astype(float).values,
-        'low': df['low'].astype(float).values,
-        'close': df['close'].astype(float).values,
-        'time': pd.to_datetime(df['time']).values
+        "open": df["open"].astype(float).values,
+        "high": df["high"].astype(float).values,
+        "low": df["low"].astype(float).values,
+        "close": df["close"].astype(float).values,
+        "time": pd.to_datetime(df["time"]).values
     }
 
 
@@ -24,7 +23,7 @@ def build_kbar(df):
 def run_ma_strategy(df, short=5, long=20):
 
     k = build_kbar(df)
-    close = k['close']
+    close = k["close"]
 
     sma_s = SMA(k, timeperiod=short)
     sma_l = SMA(k, timeperiod=long)
@@ -48,13 +47,11 @@ def run_ma_strategy(df, short=5, long=20):
             equity_curve.append(equity)
             continue
 
-        # BUY
         if sma_s[i] > sma_l[i] and sma_s[i-1] <= sma_l[i-1] and pos == 0:
             pos = 1
             entry = close[i]
             trade.append({"type": "BUY", "price": entry})
 
-        # SELL
         elif sma_s[i] < sma_l[i] and sma_s[i-1] >= sma_l[i-1] and pos == 1:
             pnl = close[i] - entry
             equity += pnl
@@ -73,12 +70,12 @@ def run_ma_strategy(df, short=5, long=20):
 
 
 # =========================
-# MACD
+# MACD策略
 # =========================
 def run_macd_strategy(df):
 
     k = build_kbar(df)
-    close = k['close']
+    close = k["close"]
 
     macd, signal, hist = MACD(k)
 
@@ -124,12 +121,12 @@ def run_macd_strategy(df):
 
 
 # =========================
-# KDJ
+# KDJ策略
 # =========================
 def run_kdj_strategy(df):
 
     k = build_kbar(df)
-    close = k['close']
+    close = k["close"]
 
     slowk, slowd = STOCH(k)
 
@@ -175,7 +172,7 @@ def run_kdj_strategy(df):
 
 
 # =========================
-# 評估包裝
+# 回傳
 # =========================
 def pack(equity, curve, trade, wins, losses, fig):
 
@@ -195,17 +192,14 @@ def pack(equity, curve, trade, wins, losses, fig):
 
 
 # =========================
-# Max Drawdown
+# 最大回撤
 # =========================
 def max_drawdown(curve):
-
     peak = -1e9
     mdd = 0
-
     for x in curve:
         peak = max(peak, x)
         mdd = max(mdd, peak - x)
-
     return mdd
 
 
@@ -213,13 +207,38 @@ def max_drawdown(curve):
 # Sharpe
 # =========================
 def sharpe_ratio(curve):
-
     r = np.diff(curve)
-
-    if len(r) == 0:
+    if len(r) == 0 or np.std(r) == 0:
         return 0
-
-    if np.std(r) == 0:
-        return 0
-
     return np.mean(r) / np.std(r)
+
+
+# =========================
+
+# =========================
+def optimize_ma(df):
+
+    best_result = None
+    best_score = -1e9
+    best_params = None
+
+    for short in range(5, 30, 5):
+        for long in range(10, 60, 10):
+
+            if short >= long:
+                continue
+
+            result = run_ma_strategy(df, short, long)
+
+            score = (
+                result["sharpe"] * 0.6 +
+                result["profit"] * 0.001 -
+                result["mdd"] * 0.5
+            )
+
+            if score > best_score:
+                best_score = score
+                best_result = result
+                best_params = (short, long)
+
+    return best_result, best_params, best_score
