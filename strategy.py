@@ -1,69 +1,64 @@
 import numpy as np
-        'winrate': 0.58,
-        'mdd': min(equity_curve) if equity_curve else 0,
-        'fig': fig,
-        'equity_curve': equity_curve,
-        'trade_record': trade_record
-    }
+import pandas as pd
+import matplotlib.pyplot as plt
+
+from talib.abstract import SMA
+from talib.abstract import RSI
+from talib.abstract import MACD
+from talib.abstract import STOCH
 
 
 ################################################
-# KDJ策略
+# 建立KBar格式
 ################################################
 
 
-def run_kdj_strategy(df, period):
+def build_kbar(df):
+
+    KBar_dic = {}
+
+    KBar_dic['open'] = np.array(df['open']).astype(float)
+    KBar_dic['high'] = np.array(df['high']).astype(float)
+    KBar_dic['low'] = np.array(df['low']).astype(float)
+    KBar_dic['close'] = np.array(df['close']).astype(float)
+    KBar_dic['volume'] = np.array(df['volume'])
+
+    KBar_dic['time'] = np.array(
+        pd.to_datetime(df['time'])
+    )
+
+    return KBar_dic
+
+
+################################################
+# MA策略
+################################################
+
+
+def run_ma_strategy(df, short_period, long_period):
 
     KBar_dic = build_kbar(df)
 
-    K, D = STOCH(
+    short_ma = SMA(
         KBar_dic,
-        fastk_period=period,
-        slowk_period=3,
-        slowd_period=3
+        timeperiod=short_period
+    )
+
+    long_ma = SMA(
+        KBar_dic,
+        timeperiod=long_period
     )
 
     profit = 0
     equity_curve = []
     trade_record = []
 
-    for n in range(1, len(K)):
+    for n in range(1, len(KBar_dic['close'])):
 
-        if np.isnan(K[n]):
+        if np.isnan(short_ma[n]):
             continue
 
         if (
-            K[n-1] <= D[n-1]
+            short_ma[n-1] <= long_ma[n-1]
             and
-            K[n] > D[n]
-        ):
-
-            trade_record.append({
-                'Signal': 'KDJ Golden Cross',
-                'K': K[n],
-                'D': D[n]
-            })
-
-            profit += 70
-
-        equity_curve.append(profit)
-
-    fig, ax = plt.subplots(figsize=(10, 4))
-
-    ax.plot(K, label='K')
-    ax.plot(D, label='D')
-
-    ax.axhline(80)
-    ax.axhline(20)
-
-    ax.legend()
-    ax.set_title('KDJ Strategy')
-
-    return {
-        'profit': profit,
-        'winrate': 0.57,
-        'mdd': min(equity_curve) if equity_curve else 0,
-        'fig': fig,
-        'equity_curve': equity_curve,
-        'trade_record': trade_record
     }
