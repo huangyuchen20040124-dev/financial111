@@ -7,8 +7,7 @@ from strategy import (
     run_macd_strategy,
     run_kdj_strategy,
     run_rsi_strategy,
-    run_bollinger_strategy,
-    optimize_ma
+    run_bollinger_strategy
 )
 
 # =========================
@@ -18,13 +17,13 @@ st.set_page_config(page_title="回測系統", layout="wide")
 st.title("📊 台積電回測系統")
 
 # =========================
-# 資料
+# 讀資料（確保檔案存在）
 # =========================
 df = pd.read_excel("kbars_1d_2330_2020-01-02_To_2025-03-04.xlsx")
 df["time"] = pd.to_datetime(df["time"])
 
 # =========================
-# 時間範圍
+# 日期篩選
 # =========================
 start = st.sidebar.date_input("開始日期", pd.to_datetime("2022-01-01"))
 end = st.sidebar.date_input("結束日期", pd.to_datetime("2025-03-04"))
@@ -40,20 +39,13 @@ strategy = st.sidebar.selectbox(
     ["MA策略", "MACD策略", "KDJ策略", "RSI策略", "布林通道策略"]
 )
 
-use_opt = st.sidebar.checkbox("MA最佳化")
-
 # =========================
 # 回測
 # =========================
 if st.button("開始回測"):
 
     if strategy == "MA策略":
-        if use_opt:
-            result, params, score = optimize_ma(df)
-            st.success(f"最佳參數：{params}")
-            st.info(f"Score：{score:.4f}")
-        else:
-            result = run_ma_strategy(df)
+        result = run_ma_strategy(df)
 
     elif strategy == "MACD策略":
         result = run_macd_strategy(df)
@@ -75,7 +67,7 @@ if st.button("開始回測"):
     col1, col2, col3 = st.columns(3)
     col1.metric("Profit", round(result["profit"], 2))
     col2.metric("Winrate", f"{result['winrate']*100:.2f}%")
-    col3.metric("Max Drawdown", round(result["mdd"], 2))
+    col3.metric("MDD", round(result["mdd"], 2))
 
     st.metric("Sharpe", round(result["sharpe"], 2))
 
@@ -85,6 +77,9 @@ if st.button("開始回測"):
     st.subheader("策略圖")
     st.pyplot(result["fig"])
 
+    # =========================
+    # Equity Curve
+    # =========================
     st.subheader("Equity Curve")
     fig2, ax2 = plt.subplots()
     ax2.plot(result["equity_curve"])
@@ -94,24 +89,4 @@ if st.button("開始回測"):
     # 交易紀錄
     # =========================
     st.subheader("交易紀錄")
-    trade_df = pd.DataFrame(result["trade_record"])
-    st.dataframe(trade_df)
-
-    st.download_button(
-        "下載CSV",
-        trade_df.to_csv(index=False).encode("utf-8-sig"),
-        "trade.csv",
-        "text/csv"
-    )
-
-    # =========================
-    # AI分析
-    # =========================
-    st.subheader("AI分析")
-
-    st.write(f"""
-- 淨利：{result['profit']}
-- 勝率：{result['winrate']:.2%}
-- 最大回撤：{result['mdd']}
-- Sharpe：{result['sharpe']:.2f}
-""")
+    st.dataframe(pd.DataFrame(result["trade_record"]))
