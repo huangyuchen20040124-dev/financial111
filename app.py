@@ -1,155 +1,65 @@
+# -*- coding: utf-8 -*-
 
-import streamlit as st
-import pandas as pd
-import numpy as np
-import matplotlib.pyplot as plt
-from talib import MACD, STOCH
-
-st.title("📈 程式交易回測系統")
-st.write("MACD 與 KDJ 策略回測")
-
-uploaded_file = st.file_uploader("請上傳股票資料 CSV", type=["csv"])
-
-strategy = st.selectbox(
-    "選擇策略",
-    ["MACD", "KDJ"]
+st.set_page_config(
+    page_title='量化交易回測系統',
+    layout='wide'
 )
 
-if uploaded_file is not None:
+st.title('台積電量化交易回測系統')
 
-    df = pd.read_csv(uploaded_file)
 
-    st.subheader("原始資料")
-    st.dataframe(df.head())
+# 讀取資料
+@st.cache_data
 
-    close = df['close']
-    high = df['high']
-    low = df['low']
+def load_data():
+    df = pd.read_excel(
+        'kbars_2330_2022-01-01-2024-04-09.xlsx'
+    )
+    return df
 
-    # =========================
-    # MACD
-    # =========================
-    if strategy == "MACD":
 
-        macd, signal, hist = MACD(
-            close,
-            fastperiod=12,
-            slowperiod=26,
-            signalperiod=9
-        )
+try:
+    df = load_data()
 
-        df['MACD'] = macd
-        df['Signal'] = signal
+    st.success('資料載入成功')
 
-        st.subheader("MACD 指標")
+    st.write(df.head())
 
-        fig, ax = plt.subplots()
-        ax.plot(df['MACD'], label='MACD')
-        ax.plot(df['Signal'], label='Signal')
-        ax.legend()
+except Exception as e:
+    st.error(f'資料讀取失敗: {e}')
+    st.stop()
 
-        st.pyplot(fig)
 
-        trade_log = []
+# 側邊欄
+strategy = st.sidebar.selectbox(
+    '選擇策略',
+    [
+        'MA 均線策略',
+        'RSI 順勢策略',
+        '布林通道策略'
+    ]
+)
 
-        position = 0
 
-        for i in range(1, len(df)):
+if st.button('開始回測'):
 
-            if np.isnan(df['MACD'][i]):
-                continue
+    if strategy == 'MA 均線策略':
+        result = run_ma_strategy(df)
 
-            # 黃金交叉
-            if position == 0 and \
-               df['MACD'][i-1] < df['Signal'][i-1] and \
-               df['MACD'][i] > df['Signal'][i]:
+    elif strategy == 'RSI 順勢策略':
+        result = run_rsi_strategy(df)
 
-                trade_log.append(
-                    f"Buy at {df['close'][i]}"
-                )
+    elif strategy == '布林通道策略':
+        result = run_bbands_strategy(df)
 
-                position = 1
 
-            # 死亡交叉
-            elif position == 1 and \
-                 df['MACD'][i-1] > df['Signal'][i-1] and \
-                 df['MACD'][i] < df['Signal'][i]:
+    st.subheader('回測結果')
 
-                trade_log.append(
-                    f"Sell at {df['close'][i]}"
-                )
+    col1, col2, col3 = st.columns(3)
 
-                position = 0
+    col1.metric('淨利', result['profit'])
+    col2.metric('勝率', result['winrate'])
+    col3.metric('最大回落', result['mdd'])
 
-        st.subheader("交易紀錄")
 
-        for t in trade_log:
-            st.write(t)
-
-    # =========================
-    # KDJ
-    # =========================
-    elif strategy == "KDJ":
-
-        K, D = STOCH(
-            high,
-            low,
-            close,
-            fastk_period=9,
-            slowk_period=3,
-            slowd_period=3
-        )
-
-        J = 3 * K - 2 * D
-
-        df['K'] = K
-        df['D'] = D
-        df['J'] = J
-
-        st.subheader("KDJ 指標")
-
-        fig, ax = plt.subplots()
-        ax.plot(df['K'], label='K')
-        ax.plot(df['D'], label='D')
-        ax.plot(df['J'], label='J')
-        ax.legend()
-
-        st.pyplot(fig)
-
-        trade_log = []
-
-        position = 0
-
-        for i in range(1, len(df)):
-
-            if np.isnan(df['K'][i]):
-                continue
-
-            # 黃金交叉
-            if position == 0 and \
-               df['K'][i-1] < df['D'][i-1] and \
-               df['K'][i] > df['D'][i]:
-
-                trade_log.append(
-                    f"Buy at {df['close'][i]}"
-                )
-
-                position = 1
-
-            # 死亡交叉
-            elif position == 1 and \
-                 df['K'][i-1] > df['D'][i-1] and \
-                 df['K'][i] < df['D'][i]:
-
-                trade_log.append(
-                    f"Sell at {df['close'][i]}"
-                )
-
-                position = 0
-
-        st.subheader("交易紀錄")
-
-        for t in trade_log:
-            st.write(t)
-
-st.write("✅ Streamlit App 執行完成")
+    st.pyplot(result['fig'])
