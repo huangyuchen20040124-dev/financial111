@@ -15,7 +15,7 @@ st.title('台積電量化交易回測系統')
 
 def load_data():
     df = pd.read_excel(
-        'kbars_2330_2022-01-01-2024-04-09.pkl'
+        'kbars_1d_2330_2020-01-02_To_2025-03-04.xlsx'
     )
     return df
 
