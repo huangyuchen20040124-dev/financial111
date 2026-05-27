@@ -14,8 +14,8 @@ from strategy import (
 # =========================
 # UI
 # =========================
-st.set_page_config(page_title="量化回測系統", layout="wide")
-st.title("📊 台積電量化回測系統")
+st.set_page_config(page_title="回測系統", layout="wide")
+st.title("📊 台積電回測系統")
 
 # =========================
 # 資料
