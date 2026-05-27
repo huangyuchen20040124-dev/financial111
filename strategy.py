@@ -24,7 +24,14 @@ def SMA(arr, n):
 
 
 # =========================
-# RSI（均值回歸）
+# EMA
+# =========================
+def EMA(arr, span):
+    return pd.Series(arr).ewm(span=span, adjust=False).mean().values
+
+
+# =========================
+# RSI（無TA-Lib）
 # =========================
 def RSI(close, period=14):
     delta = np.diff(close, prepend=close[0])
@@ -38,23 +45,19 @@ def RSI(close, period=14):
     return (100 - (100 / (1 + rs))).values
 
 
-def run_rsi_strategy(df):
-    k = build_kbar(df)
-    close = k["close"]
-
-    rsi = RSI(close)
-
-    # 👉 均值回歸（超賣買、但要趨勢過濾）
-    ma = SMA(close, 50)
-
-    buy = (rsi < 30) & (close > ma)
-    sell = (rsi > 70) | (close < ma)
-
-    return backtest(close, buy, sell, "RSI Mean Reversion")
+# =========================
+# MACD
+# =========================
+def MACD(close):
+    ema12 = EMA(close, 12)
+    ema26 = EMA(close, 26)
+    macd = ema12 - ema26
+    signal = EMA(macd, 9)
+    return macd, signal, None
 
 
 # =========================
-# 布林通道（突破策略）
+# 布林通道
 # =========================
 def BBANDS(close, n=20):
     mid = pd.Series(close).rolling(n).mean().values
@@ -66,23 +69,11 @@ def BBANDS(close, n=20):
     return upper, mid, lower
 
 
-def run_bollinger_strategy(df):
-    k = build_kbar(df)
-    close = k["close"]
-
-    upper, mid, lower = BBANDS(close)
-
-    # 👉 突破策略（不是反轉！）
-    buy = close > upper      # 突破上軌追多
-    sell = close < mid       # 跌回均線出場
-
-    return backtest(close, buy, sell, "BB Breakout")
-
-
 # =========================
-# KDJ（動能趨勢）
+# KDJ（簡化穩定版）
 # =========================
 def KDJ(high, low, close, n=9):
+
     low_min = pd.Series(low).rolling(n).min()
     high_max = pd.Series(high).rolling(n).max()
 
@@ -92,44 +83,6 @@ def KDJ(high, low, close, n=9):
     d = pd.Series(k).rolling(3).mean().values
 
     return k, d
-
-
-def run_kdj_strategy(df):
-    k = build_kbar(df)
-    close = k["close"]
-
-    kdj_k, kdj_d = KDJ(k["high"], k["low"], close)
-
-    ma20 = SMA(close, 20)
-
-    # 👉 動能順勢（不是超買超賣）
-    buy = (kdj_k > kdj_d) & (close > ma20)
-    sell = (kdj_k < kdj_d) | (close < ma20)
-
-    return backtest(close, buy, sell, "KDJ Momentum")
-
-
-# =========================
-# MA / MACD（保留）
-# =========================
-def run_ma_strategy(df):
-    k = build_kbar(df)
-    close = k["close"]
-
-    sma_s = SMA(close, 5)
-    sma_l = SMA(close, 20)
-
-    return backtest(close, sma_s > sma_l, sma_s < sma_l, "MA")
-
-
-def run_macd_strategy(df):
-    ema12 = pd.Series(df["close"]).ewm(span=12).mean().values
-    ema26 = pd.Series(df["close"]).ewm(span=26).mean().values
-
-    macd = ema12 - ema26
-    signal = pd.Series(macd).ewm(span=9).mean().values
-
-    return backtest(df["close"].values, macd > signal, macd < signal, "MACD")
 
 
 # =========================
@@ -177,7 +130,118 @@ def backtest(close, buy, sell, name):
 
 
 # =========================
-# pack
+# MA
+# =========================
+def run_ma_strategy(df, short=5, long=20):
+    k = build_kbar(df)
+    close = k["close"]
+
+    sma_s = SMA(close, short)
+    sma_l = SMA(close, long)
+
+    return backtest(close, sma_s > sma_l, sma_s < sma_l, "MA")
+
+
+# =========================
+# MACD
+# =========================
+def run_macd_strategy(df):
+    k = build_kbar(df)
+    close = k["close"]
+
+    macd, signal, _ = MACD(close)
+
+    return backtest(close, macd > signal, macd < signal, "MACD")
+
+
+# =========================
+# KDJ
+# =========================
+def run_kdj_strategy(df):
+    k = build_kbar(df)
+    close = k["close"]
+
+    kdj_k, kdj_d = KDJ(k["high"], k["low"], close)
+
+    return backtest(close, kdj_k < kdj_d, kdj_k > kdj_d, "KDJ")
+
+
+# =========================
+# RSI
+# =========================
+def run_rsi_strategy(df):
+    k = build_kbar(df)
+    close = k["close"]
+
+    rsi = RSI(close)
+
+    return backtest(close, rsi < 30, rsi > 70, "RSI")
+
+
+# =========================
+# 布林通道
+# =========================
+def run_bollinger_strategy(df):
+    k = build_kbar(df)
+    close = k["close"]
+
+    upper, mid, lower = BBANDS(close)
+
+    return backtest(close, close < lower, close > upper, "BB")
+
+
+# =========================
+# MA最佳化
+# =========================
+def optimize_ma(df):
+
+    best = None
+    best_score = -1e9
+    best_params = None
+
+    for s in range(5, 30, 5):
+        for l in range(10, 60, 10):
+
+            if s >= l:
+                continue
+
+            r = run_ma_strategy(df, s, l)
+
+            score = r["sharpe"] * 0.6 + r["profit"] * 0.001 - r["mdd"] * 0.5
+
+            if score > best_score:
+                best_score = score
+                best = r
+                best_params = (s, l)
+
+    return best, best_params, best_score
+
+
+# =========================
+# ranking
+# =========================
+def strategy_rank(results):
+
+    out = []
+
+    for name, r in results.items():
+
+        score = r["sharpe"] * 0.6 + r["profit"] * 0.001 - r["mdd"] * 0.5
+
+        out.append({
+            "strategy": name,
+            "score": score,
+            "profit": r["profit"],
+            "winrate": r["winrate"],
+            "mdd": r["mdd"],
+            "sharpe": r["sharpe"]
+        })
+
+    return sorted(out, key=lambda x: x["score"], reverse=True)
+
+
+# =========================
+# metrics
 # =========================
 def pack(equity, curve, trade, wins, losses, fig):
 
