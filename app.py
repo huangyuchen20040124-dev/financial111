@@ -2,6 +2,7 @@
 
 import streamlit as st
 import pandas as pd
+from strategy import run_ma_strategy
 st.set_page_config(
     page_title='量化交易回測系統',
     layout='wide'
