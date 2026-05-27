@@ -1,13 +1,8 @@
 
-python_version
 numpy
-streamlit
-streamlit_webrtc
-streamlit-nested-layout
+pandas
 matplotlib
-openpyxl
-plotly
 mplfinance
-shioaji
-pynacl
 TA-Lib
+openpyxl
+streamlit
