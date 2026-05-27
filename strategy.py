@@ -1,7 +1,7 @@
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
-from talib.abstract import SMA, MACD, STOCH, RSI, BBANDS
+from talib.abstract import SMA, MACD, RSI, BBANDS, STOCH
 
 
 # =========================
@@ -18,87 +18,9 @@ def build_kbar(df):
 
 
 # =========================
-# MA策略
+# 通用回測
 # =========================
-def run_ma_strategy(df, short=5, long=20):
-
-    k = build_kbar(df)
-    close = k["close"]
-
-    sma_s = SMA(k, timeperiod=short)
-    sma_l = SMA(k, timeperiod=long)
-
-    return backtest_signal(close, sma_s > sma_l, sma_s < sma_l, "MA")
-
-
-# =========================
-# MACD策略
-# =========================
-def run_macd_strategy(df):
-
-    k = build_kbar(df)
-    close = k["close"]
-
-    macd, signal, _ = MACD(k)
-
-    buy = macd > signal
-    sell = macd < signal
-
-    return backtest_signal(close, buy, sell, "MACD")
-
-
-# =========================
-# KDJ策略
-# =========================
-def run_kdj_strategy(df):
-
-    k = build_kbar(df)
-    close = k["close"]
-
-    kdj_k, kdj_d = STOCH(k)
-
-    buy = kdj_k < 20
-    sell = kdj_k > 80
-
-    return backtest_signal(close, buy, sell, "KDJ")
-
-
-# =========================
-# RSI策略（新增）
-# =========================
-def run_rsi_strategy(df):
-
-    k = build_kbar(df)
-    close = k["close"]
-
-    rsi = RSI(k, timeperiod=14)
-
-    buy = rsi < 30
-    sell = rsi > 70
-
-    return backtest_signal(close, buy, sell, "RSI")
-
-
-# =========================
-# 布林通道策略（新增）
-# =========================
-def run_bollinger_strategy(df):
-
-    k = build_kbar(df)
-    close = k["close"]
-
-    upper, mid, lower = BBANDS(k, timeperiod=20)
-
-    buy = close < lower
-    sell = close > upper
-
-    return backtest_signal(close, buy, sell, "BB")
-
-
-# =========================
-# 通用回測核心
-# =========================
-def backtest_signal(close, buy_signal, sell_signal, name):
+def backtest(close, buy, sell, name):
 
     equity = 0
     curve = []
@@ -117,14 +39,12 @@ def backtest_signal(close, buy_signal, sell_signal, name):
             curve.append(0)
             continue
 
-        # BUY
-        if buy_signal[i] and not buy_signal[i-1] and pos == 0:
+        if buy[i] and not buy[i-1] and pos == 0:
             pos = 1
             entry = close[i]
             trade.append({"type": "BUY", "price": entry})
 
-        # SELL
-        elif sell_signal[i] and not sell_signal[i-1] and pos == 1:
+        elif sell[i] and not sell[i-1] and pos == 1:
             pnl = close[i] - entry
             equity += pnl
             pos = 0
@@ -142,7 +62,88 @@ def backtest_signal(close, buy_signal, sell_signal, name):
 
 
 # =========================
-# 回傳
+# MA策略
+# =========================
+def run_ma_strategy(df, short=5, long=20):
+
+    k = build_kbar(df)
+    close = k["close"]
+
+    sma_s = SMA(k, timeperiod=short)
+    sma_l = SMA(k, timeperiod=long)
+
+    buy = sma_s > sma_l
+    sell = sma_s < sma_l
+
+    return backtest(close, buy, sell, "MA")
+
+
+# =========================
+# MACD策略
+# =========================
+def run_macd_strategy(df):
+
+    k = build_kbar(df)
+    close = k["close"]
+
+    macd, signal, _ = MACD(k)
+
+    buy = macd > signal
+    sell = macd < signal
+
+    return backtest(close, buy, sell, "MACD")
+
+
+# =========================
+# KDJ策略
+# =========================
+def run_kdj_strategy(df):
+
+    k = build_kbar(df)
+    close = k["close"]
+
+    kdj_k, kdj_d = STOCH(k)
+
+    buy = kdj_k < 20
+    sell = kdj_k > 80
+
+    return backtest(close, buy, sell, "KDJ")
+
+
+# =========================
+# RSI策略（新增）
+# =========================
+def run_rsi_strategy(df):
+
+    k = build_kbar(df)
+    close = k["close"]
+
+    rsi = RSI(k, timeperiod=14)
+
+    buy = rsi < 30
+    sell = rsi > 70
+
+    return backtest(close, buy, sell, "RSI")
+
+
+# =========================
+# 布林通道策略（新增）
+# =========================
+def run_bollinger_strategy(df):
+
+    k = build_kbar(df)
+    close = k["close"]
+
+    upper, mid, lower = BBANDS(k, timeperiod=20)
+
+    buy = close < lower
+    sell = close > upper
+
+    return backtest(close, buy, sell, "BB")
+
+
+# =========================
+# 回傳封裝
 # =========================
 def pack(equity, curve, trade, wins, losses, fig):
 
@@ -184,19 +185,15 @@ def sharpe_ratio(curve):
 
 
 # =========================
-# 🏆 策略排行榜（新增）
+# 🏆 排行榜
 # =========================
-def strategy_rank(results_dict):
+def strategy_rank(results):
 
     ranking = []
 
-    for name, r in results_dict.items():
+    for name, r in results.items():
 
-        score = (
-            r["sharpe"] * 0.6 +
-            r["profit"] * 0.001 -
-            r["mdd"] * 0.5
-        )
+        score = r["sharpe"] * 0.6 + r["profit"] * 0.001 - r["mdd"] * 0.5
 
         ranking.append({
             "strategy": name,
@@ -206,6 +203,4 @@ def strategy_rank(results_dict):
             "mdd": r["mdd"]
         })
 
-    ranking = sorted(ranking, key=lambda x: x["score"], reverse=True)
-
-    return ranking
+    return sorted(ranking, key=lambda x: x["score"], reverse=True)
