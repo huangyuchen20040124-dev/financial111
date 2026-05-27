@@ -6,8 +6,9 @@ from strategy import (
     run_ma_strategy,
     run_macd_strategy,
     run_kdj_strategy,
-    optimize_ma,
-    strategy_rank
+    run_rsi_strategy,
+    run_bollinger_strategy,
+    optimize_ma
 )
 
 # =========================
@@ -23,7 +24,7 @@ df = pd.read_excel("kbars_1d_2330_2020-01-02_To_2025-03-04.xlsx")
 df["time"] = pd.to_datetime(df["time"])
 
 # =========================
-# 日期區間
+# 時間範圍
 # =========================
 st.sidebar.subheader("時間區間")
 
@@ -38,21 +39,17 @@ df = df[(df["time"] >= pd.to_datetime(start)) &
 # =========================
 strategy = st.sidebar.selectbox(
     "選擇策略",
-    ["MA策略", "MACD策略", "KDJ策略"]
+    ["MA策略", "MACD策略", "KDJ策略", "RSI策略", "布林通道策略"]
 )
 
-use_opt = st.sidebar.checkbox("啟用MA最佳化")
+use_opt = st.sidebar.checkbox("MA最佳化（僅MA用）")
 
 # =========================
 # 回測
 # =========================
 if st.button("開始回測"):
 
-    results = {}
-
-    # ===== MA =====
     if strategy == "MA策略":
-
         if use_opt:
             result, params, score = optimize_ma(df)
             st.success(f"最佳MA：{params}")
@@ -60,17 +57,17 @@ if st.button("開始回測"):
         else:
             result = run_ma_strategy(df)
 
-        results["MA策略"] = result
-
-    # ===== MACD =====
     elif strategy == "MACD策略":
         result = run_macd_strategy(df)
-        results["MACD策略"] = result
 
-    # ===== KDJ =====
-    else:
+    elif strategy == "KDJ策略":
         result = run_kdj_strategy(df)
-        results["KDJ策略"] = result
+
+    elif strategy == "RSI策略":
+        result = run_rsi_strategy(df)
+
+    else:
+        result = run_bollinger_strategy(df)
 
     # =========================
     # 績效
@@ -130,34 +127,3 @@ if st.button("開始回測"):
         text += "\n❌ 策略較弱"
 
     st.write(text)
-
-    # =========================
-    # 排行榜（單策略版本）
-    # =========================
-    st.subheader("策略排行榜")
-
-    ranking = strategy_rank(results)
-    rank_df = pd.DataFrame(ranking)
-
-    st.dataframe(rank_df)
-
-    best = ranking[0]["strategy"]
-    st.success(f"最佳策略：{best}")
-
-    best_result = results[best]
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Profit", round(best_result["profit"], 2))
-    col2.metric("Winrate", f"{best_result['winrate']*100:.2f}%")
-    col3.metric("MDD", round(best_result["mdd"], 2))
-
-    st.metric("Sharpe", round(best_result["sharpe"], 2))
-
-    st.pyplot(best_result["fig"])
-
-    fig3, ax3 = plt.subplots()
-    ax3.plot(best_result["equity_curve"])
-    st.pyplot(fig3)
-
-    st.subheader("交易紀錄")
-    st.dataframe(pd.DataFrame(best_result["trade_record"]))
