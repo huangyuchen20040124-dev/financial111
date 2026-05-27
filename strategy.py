@@ -2,7 +2,6 @@ import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 
-
 # =========================
 # KBAR
 # =========================
@@ -64,9 +63,7 @@ def run_ma_strategy(df, short=5, long=20):
         curve.append(equity)
 
     if pos == 1:
-        pnl = close[-1] - entry
-        equity += pnl
-        trade.append({"type": "SELL", "price": close[-1], "pnl": pnl})
+        equity += close[-1] - entry
 
     return pack(equity, curve, trade, wins, losses, fig)
 
@@ -83,10 +80,7 @@ def run_macd_strategy(df):
     k = build_kbar(df)
     close = k["close"]
 
-    ema12 = ema(close, 12)
-    ema26 = ema(close, 26)
-
-    macd = ema12 - ema26
+    macd = ema(close, 12) - ema(close, 26)
     signal = ema(macd, 9)
 
     equity = 0
@@ -122,23 +116,24 @@ def run_macd_strategy(df):
         curve.append(equity)
 
     if pos == 1:
-        pnl = close[-1] - entry
-        equity += pnl
+        equity += close[-1] - entry
 
     return pack(equity, curve, trade, wins, losses, fig)
 
 
 # =========================
-# RSI（純 numpy）
+# RSI
 # =========================
 def calc_rsi(close, period=14):
 
-    delta = np.diff(close, prepend=close[0])
-    gain = np.where(delta > 0, delta, 0)
-    loss = np.where(delta < 0, -delta, 0)
+    close = pd.Series(close)
 
-    avg_gain = pd.Series(gain).rolling(period).mean()
-    avg_loss = pd.Series(loss).rolling(period).mean()
+    delta = close.diff()
+    gain = delta.clip(lower=0)
+    loss = -delta.clip(upper=0)
+
+    avg_gain = gain.rolling(period).mean()
+    avg_loss = loss.rolling(period).mean()
 
     rs = avg_gain / avg_loss
     rsi = 100 - (100 / (1 + rs))
@@ -150,6 +145,7 @@ def run_rsi_strategy(df):
 
     k = build_kbar(df)
     close = k["close"]
+    time = k["time"]
 
     rsi = calc_rsi(close)
 
@@ -168,17 +164,21 @@ def run_rsi_strategy(df):
 
     for i in range(1, len(close)):
 
+        if np.isnan(rsi[i]):
+            curve.append(equity)
+            continue
+
         if rsi[i] < 30 and pos == 0:
             pos = 1
             entry = close[i]
-            trade.append({"time": k["time"][i], "type": "BUY", "price": entry})
+            trade.append({"time": time[i], "type": "BUY", "price": entry})
 
         elif rsi[i] > 70 and pos == 1:
             pnl = close[i] - entry
             equity += pnl
             pos = 0
 
-            trade.append({"time": k["time"][i], "type": "SELL", "price": close[i], "pnl": pnl})
+            trade.append({"time": time[i], "type": "SELL", "price": close[i], "pnl": pnl})
 
             wins += pnl > 0
             losses += pnl <= 0
@@ -209,6 +209,7 @@ def run_bollinger_strategy(df):
 
     k = build_kbar(df)
     close = k["close"]
+    time = k["time"]
 
     upper, mid, lower = bollinger(close)
 
@@ -230,14 +231,14 @@ def run_bollinger_strategy(df):
         if close[i] < lower[i] and pos == 0:
             pos = 1
             entry = close[i]
-            trade.append({"time": k["time"][i], "type": "BUY", "price": entry})
+            trade.append({"time": time[i], "type": "BUY", "price": entry})
 
         elif close[i] > upper[i] and pos == 1:
             pnl = close[i] - entry
             equity += pnl
             pos = 0
 
-            trade.append({"time": k["time"][i], "type": "SELL", "price": close[i], "pnl": pnl})
+            trade.append({"time": time[i], "type": "SELL", "price": close[i], "pnl": pnl})
 
             wins += pnl > 0
             losses += pnl <= 0
@@ -251,7 +252,7 @@ def run_bollinger_strategy(df):
 
 
 # =========================
-# 共用
+# 共用封裝
 # =========================
 def pack(equity, curve, trade, wins, losses, fig):
 
