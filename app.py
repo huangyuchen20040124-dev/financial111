@@ -1,6 +1,9 @@
-import numpy as np
-import pandas as pd
-import matplotlib.pyplot as plt
+from strategy import (
+    run_ma_strategy,
+    run_macd_strategy,
+    run_kdj_strategy,
+    run_rsi_strategy,
+    run_bollinger_strategy
 
 
 # =========================
